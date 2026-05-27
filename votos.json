@@ -1,0 +1,13 @@
+db.createCollection("votos", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: ["id_resena", "id_usuario", "fecha"],
+      properties: {
+        id_resena:  { bsonType: "objectId" },
+        id_usuario: { bsonType: "int" },
+        fecha:      { bsonType: "date" }
+      }
+    }
+  }
+})

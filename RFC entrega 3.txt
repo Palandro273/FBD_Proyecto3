@@ -1,0 +1,150 @@
+------------------------------------------------------------
+RFC1 - TOP 10 HOTELES POR CALIFICACION PROMEDIO
+------------------------------------------------------------
+// Documentos usados: coleccion "resenas".
+// Atributos: id_hotel, calificacion, fecha_creacion, estado.
+//
+// Justificacion del pipeline:
+// - $match al inicio para filtrar por periodo y por estado
+//   "publicada", aprovechando el indice compuesto y
+//   reduciendo el volumen antes de agrupar.
+// - $group por id_hotel con $avg para calcular el promedio
+//   y $sum para contar resenas (util para validar el ranking).
+// - $sort descendente por promedio y $limit 10 para obtener
+//   el Top 10 solicitado.
+// - APEX cruza los id_hotel resultantes con la tabla HOTEL
+//   de Oracle para mostrar nombre y ciudad.
+ 
+db.resenas.aggregate([
+  {
+    $match: {
+      estado: "publicada",
+      fecha_creacion: {
+        $gte: ISODate("2025-01-01T00:00:00Z"),
+        $lte: ISODate("2025-12-31T23:59:59Z")
+      }
+    }
+  },
+  {
+    $group: {
+      _id: "$id_hotel",
+      promedio_calificacion: { $avg: "$calificacion" },
+      total_resenas: { $sum: 1 }
+    }
+  },
+  { $sort: { promedio_calificacion: -1 } },
+  { $limit: 10 }
+])
+ 
+ 
+------------------------------------------------------------
+RFC2 - EVOLUCION MENSUAL DE LA REPUTACION DE UN HOTEL
+------------------------------------------------------------
+// Documentos usados: coleccion "resenas".
+// Atributos: id_hotel, calificacion, fecha_creacion, estado.
+//
+// Justificacion del pipeline:
+// - $match filtra por id_hotel especifico y por el ano
+//   solicitado, aprovechando el indice idx_hotel_fecha.
+// - $group agrupa por mes extraido de fecha_creacion usando
+//   el operador $month. Calcula promedio mensual y total de
+//   resenas para dar contexto al promedio.
+// - $sort por mes para mostrar evolucion cronologica.
+// - APEX recibe el id_hotel desde un selector poblado con
+//   datos de la tabla HOTEL en Oracle.
+ 
+db.resenas.aggregate([
+  {
+    $match: {
+      id_hotel: 7,
+      estado: "publicada",
+      fecha_creacion: {
+        $gte: ISODate("2025-01-01T00:00:00Z"),
+        $lt:  ISODate("2026-01-01T00:00:00Z")
+      }
+    }
+  },
+  {
+    $group: {
+      _id: { mes: { $month: "$fecha_creacion" } },
+      promedio_calificacion: { $avg: "$calificacion" },
+      total_resenas: { $sum: 1 }
+    }
+  },
+  { $sort: { "_id.mes": 1 } }
+])
+ 
+ 
+------------------------------------------------------------
+RFC3 - PERFIL COMPARATIVO DE HOTELES POR CIUDAD
+------------------------------------------------------------
+// Documentos usados: coleccion "resenas".
+// Atributos: id_hotel, calificacion, estado, respuesta_admin,
+//            destacada.
+//
+// Justificacion del pipeline:
+// - APEX consulta primero en Oracle los id_hotel que
+//   pertenecen a la ciudad seleccionada y los pasa como
+//   parametro al $in.
+// - $match filtra por esos id_hotel y por estado "publicada".
+// - $group agrupa por hotel y calcula en una sola pasada:
+//     * promedio general
+//     * total de resenas
+//     * cantidad con respuesta del admin (usando $ifNull
+//       sobre el subdocumento embebido)
+//     * cantidad de destacadas (usando $cond sobre el bool)
+// - $project transforma los conteos en porcentajes para la
+//   tabla comparativa. Se usa $round para formato limpio.
+// - $sort ordena por promedio descendente para identificar
+//   facilmente los hoteles por debajo del promedio.
+// - APEX cruza los id_hotel con Oracle para mostrar nombre.
+ 
+db.resenas.aggregate([
+  {
+    $match: {
+      id_hotel: { $in: [3, 7, 12, 15] },
+      estado: "publicada"
+    }
+  },
+  {
+    $group: {
+      _id: "$id_hotel",
+      promedio_calificacion: { $avg: "$calificacion" },
+      total_resenas: { $sum: 1 },
+      con_respuesta: {
+        $sum: {
+          $cond: [{ $ifNull: ["$respuesta_admin", false] }, 1, 0]
+        }
+      },
+      destacadas: {
+        $sum: { $cond: ["$destacada", 1, 0] }
+      }
+    }
+  },
+  {
+    $project: {
+      _id: 1,
+      promedio_calificacion: { $round: ["$promedio_calificacion", 2] },
+      total_resenas: 1,
+      pct_con_respuesta: {
+        $round: [
+          { $multiply: [
+            { $divide: ["$con_respuesta", "$total_resenas"] },
+            100
+          ]},
+          2
+        ]
+      },
+      pct_destacadas: {
+        $round: [
+          { $multiply: [
+            { $divide: ["$destacadas", "$total_resenas"] },
+            100
+          ]},
+          2
+        ]
+      }
+    }
+  },
+  { $sort: { promedio_calificacion: -1 } }
+])

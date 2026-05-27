@@ -1,0 +1,32 @@
+db.createCollection("resenas", {
+  validator: {
+    $jsonSchema: {
+      bsonType: "object",
+      required: [
+        "id_reserva", "id_hotel", "id_cliente",
+        "calificacion", "texto", "fecha_creacion",
+        "estado", "destacada", "util_count"
+      ],
+      properties: {
+        id_reserva:     { bsonType: "int" },
+        id_hotel:       { bsonType: "int" },
+        id_cliente:     { bsonType: "int" },
+        calificacion:   { bsonType: "int" },
+        texto:          { bsonType: "string" },
+        fecha_creacion: { bsonType: "date" },
+        estado:         { bsonType: "string" },
+        destacada:      { bsonType: "bool" },
+        util_count:     { bsonType: "int" },
+        respuesta_admin: {
+          bsonType: "object",
+          required: ["texto", "fecha", "id_admin"],
+          properties: {
+            texto:    { bsonType: "string" },
+            fecha:    { bsonType: "date" },
+            id_admin: { bsonType: "int" }
+          }
+        }
+      }
+    }
+  }
+})
